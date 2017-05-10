@@ -1,0 +1,522 @@
+---
+title: "Final_Project_New"
+author: "Yoni Steinberg"
+date: "December 9, 2016"
+output: pdf_document
+---
+### Introduction
+
+The NLSY79 is a nationally representative sample of 12,686 young men and women who were 14-22 years old when they were first surveyed in 1979. These individuals were interviewed annually through 1994 and are currently interviewed on a biennial basis. (bis.gov/nls/nlsy79.htm)
+
+We're curious to answer the question:
+"Is there a significant difference in incmoe between men and women? Does the difference vary depending on other factors?"
+
+Of the 70 variables available in the data set, I choose to look at the following survey responses to support my analysis:
+1) Expected Educational Attainment at time of survey:  "exp.Educ1979"
+2) Actual family size in 2000: "Famsize_2000"
+3) Gender: "Gender"
+4) Race: "Race"
+5) Income in 2010: "Income"
+6) Military service: "Military"
+
+
+## 1. Data Summary
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Importing necessary R libraries and dataset
+library(MASS)
+library(plyr)
+library(ggplot2)
+#Install and load the package gridExtra
+library("gridExtra")
+library(GGally)
+options(scipen = 999)
+library(knitr)
+```
+
+```{r}
+# Import Data
+nlsy <- read.csv("http://www.andrew.cmu.edu/user/achoulde/94842/final_project/nlsy79/nlsy79_income.csv", header = TRUE)
+
+# Change column names to clarify survey question name
+colnames(nlsy) <- c("VERSION_R25_2012",
+    "CASEID_1979",
+    "BirthCountry",
+    "South",
+    "spoke.ForeignLang",
+    "specific.ForeignLang",
+    "FAM-RES_1979",
+    "FAM-6_1979",
+    "FAM-13C_1979",
+    "R_REL-1_COL_1979",
+    "exp.Educ1979",
+    "Military",
+    "WOMENS-ROLES_000001_1979",
+    "WOMENS-ROLES_000002_1979",
+    "WOMENS-ROLES_000003_1979",
+    "WOMENS-ROLES_000004_1979",
+    "WOMENS-ROLES_000006_1979",
+    "WOMENS-ROLES_000007_1979",
+    "WOMENS-ROLES_000008_1979",
+    "EXP-OCC_1979",
+    "EXP-9_1979",
+    "race",
+    "gender",
+    "MARSTAT-KEY_1979",
+    "FAMSIZE_1979",
+    "POVSTATUS_1979",
+    "POLICE-1_1980",
+    "POLIC-1C_1980",
+    "POLICE-2_1980",
+    "ALCH-2_1983",
+    "DS-8_1984",
+    "DS-9_1984",
+    "Q13-5_TRUNC_REVISED_1990",
+    "POVSTATUS_1990",
+    "HGCREV90_1990",
+    "jobs.num",
+    "NUMCH90_1990",
+    "AGEYCH90_1990",
+    "DS-12_1998",
+    "DS-13_1998",
+    "INDALL-EMP.01_2000",
+    "CPSOCC80.01_2000",
+    "OCCSP-55I_CODE_2000",
+    "Q2-15B_2000",
+    "num.children.2000",
+    "Q13-5_TRUNC_REVISED_2000",
+    "FAMSIZE_2000",
+    "TNFI_TRUNC_2000",
+    "POVSTATUS_2000",
+    "MARSTAT-COL_2000",
+    "MARSTAT-KEY_2000",
+    "MO1M1B_XRND",
+    "political.party",
+    "ATT-POL-79_2008",
+    "Q2-10B_Y_2012",
+    "INDALL_EMP.01_2012",
+    "OCCALL_EMP.01_2012",
+    "OCCSP_55I_CODE_2012",
+    "Q2_15A_2012",
+    "Q12_6_2012",
+    "income",
+    "Q13_5_SR000001_2012",
+    "Q13_5_SR000002_2012",
+    "Q13_18_TRUNC_2012",
+    "Q13_18_SR000001_TRUNC_2012",
+    "Famsize_2012",
+    "REGION_2012",
+    "educ.Attain2000",
+    "URBAN_RURAL_2012",
+    "JOBSNUM_2012")
+```
+
+```{r echo=FALSE}
+nlsy[nlsy < 0] <- NA
+```
+Next, I convert certain variables to factors and change the level names so that the data is easier to wrangle with.
+```{r}
+# Transform and relabel gender and race variables
+nlsy <- transform(nlsy, 
+        exp.Educ1979 = as.factor(mapvalues(exp.Educ1979, c(1:8, 9:12,13:15, 16, 17:18), c(rep("middle_school", 8), rep("high_school", 4), rep("some_college", 3), "college", rep("graduate", 2)))),          
+        gender = as.factor(mapvalues(gender, c(1,2), c("Male", "Female"))),
+        race = as.factor(mapvalues(race, c(1:3), c("Hispanic", "Black", "Other"))),  
+        BirthCountry = as.factor(mapvalues(BirthCountry, c(1,2), c("USA", "Foreign"))), 
+        spoke.ForeignLang = as.factor(mapvalues(spoke.ForeignLang, c(1,0), c("Yes","No"))),
+        specific.ForeignLang = as.factor(mapvalues(specific.ForeignLang, c(1:4), c("Spanish", "French", "German", "Other"))), 
+        Military = as.factor(mapvalues(Military, c(1,0), c("Yes", "No")))
+)        
+```
+```{r}
+# Subset data to include only the variables of interest
+nlsy.trial <- subset(nlsy, select = c(educ.Attain2000,POVSTATUS_1990, jobs.num, POVSTATUS_2000, spoke.ForeignLang, specific.ForeignLang, exp.Educ1979, Famsize_2012, race, gender, round(income, 0), Military))
+nlsy.pre <- subset(nlsy, select = c(spoke.ForeignLang, specific.ForeignLang, exp.Educ1979, Famsize_2012, race, gender, round(income, 0), Military))
+nlsy <- subset(nlsy, select = c(exp.Educ1979, Famsize_2012, race, gender, round(income, 0), Military))
+```
+A look at the data to see what I'm working with
+```{r}
+head(nlsy) 
+str(nlsy) 
+```
+First we'll look at our data graphically to see if there's anything out of the ordinary.
+```{r}
+# Graphically
+
+#par(mfrow = c(2,3))
+qplot(Famsize_2012, data = nlsy, main = "Family Size of Respondent", fill = Famsize_2012) + theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data = nlsy, aes(x = exp.Educ1979, fill = exp.Educ1979, position = "dodge")) + geom_bar() + ggtitle("exp.Educ1979") + theme(plot.title = element_text(hjust=0.5))   
+
+
+ggplot(data = nlsy, aes(x = race, fill = race, position = "dodge")) + geom_bar() + ggtitle("Race") + theme(plot.title = element_text(hjust=0.5))  
+
+ggplot(data = nlsy, aes(x = gender, fill = gender, position = "dodge")) + geom_bar() + ggtitle("Gender") + theme(plot.title = element_text(hjust=0.5)) 
+
+qplot(income, data = nlsy, main = "Income 2012", fill = income) + theme(plot.title = element_text(hjust = 0.5))  
+
+ggplot(data = nlsy, aes(x = Military, fill = Military, position = "dodge")) + geom_bar() + ggtitle("Military service") + theme(plot.title = element_text(hjust=0.5))
+```
+
+
+
+
+
+Let's remove the topcoded values in the data for now, I will discuss further in the Methodology section
+
+
+
+
+```{r}
+nlsy.before <- qplot(x=income, binwidth = 20000, geom = "histogram", data = nlsy)
+nlsy.orig <- nlsy
+nlsy <- subset(nlsy, income < nlsy$income[which.max(nlsy$income)], na.rm = TRUE)
+```
+
+
+
+
+Looking at Income variance by gender
+
+
+
+```{r}
+income.gender <- ddply(nlsy, ~ gender, summarize, mean.income = mean(income, na.rm = TRUE))
+income.gender
+boxP.income.gender <- qplot(gender, income, geom = "boxplot", data = nlsy, na.rm = TRUE, fill = gender)
+boxP.income.gender
+```
+
+
+
+In our data it appears that income varies by gender. Let's see if we can conclude that this is true for the overall population.
+
+
+
+```{r}
+income.gender.Ttest <- t.test(income ~ gender, data = nlsy)
+round(income.gender.Ttest$p.value, 10)
+```
+
+
+A resounding **YES**, we get a p.value ~0 at the 0.05 level, highly significant. 
+
+If we add race into the equation, what would our data show us?
+
+
+```{r}
+test <- ddply(nlsy, ~ race + gender, summarize, avg.income = round(mean(income, na.rm = TRUE), 0))
+test
+plot.test <- qplot(x = race, y = income, geom = "boxplot", data = nlsy, fill = gender, na.rm = TRUE)
+plot.test
+```
+
+*It looks like the income gap between gender varies across race*
+
+Let's look at this finding the way we did in class
+
+
+
+
+
+```{r, echo = FALSE}
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+gap.data.conf <- ddply(nlsy, ~ race, summarize, 
+                       income.gap = mean(income[gender == "Male"], na.rm = TRUE) - mean(income[gender == "Female"], na.rm = TRUE),
+                       upper = -t.test(income ~ gender)$conf.int[1],
+                       lower = -t.test(income ~ gender)$conf.int[2],
+                       is.significant = as.numeric(t.test(income ~ gender)$p.value < 0.05))
+
+# Re-order the race factor according to gap size
+gap.data.conf <- transform(gap.data.conf,
+                           race = reorder(race, income.gap))
+
+# Plot, with error bars
+ggplot(data = gap.data.conf, aes(x = race, y = income.gap,
+                            fill = is.significant)) +
+  geom_bar(stat = "identity") +
+  xlab("Race") + 
+  ylab("Income gap($)") +
+  ggtitle("Income gap between men and women, by race") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12), plot.title = element_text(hjust=0.5)) 
+
+```
+
+
+
+
+
+Repeat with military
+
+
+
+
+
+```{r, echo = FALSE}
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+gap.data.conf <- ddply(nlsy, ~ Military, summarize, 
+                       income.gap = mean(income[gender == "Male"], na.rm = TRUE) - mean(income[gender == "Female"], na.rm = TRUE),
+                       upper = -t.test(income ~ gender)$conf.int[1],
+                       lower = -t.test(income ~ gender)$conf.int[2],
+                       is.significant = as.numeric(t.test(income ~ gender)$p.value < 0.05))
+
+# Re-order the race factor according to gap size
+gap.data.conf <- transform(gap.data.conf,
+                           Military = reorder(Military, income.gap))
+
+# Plot, with error bars
+ggplot(data = gap.data.conf, aes(x = Military, y = income.gap,
+                            fill = is.significant)) +
+  geom_bar(stat = "identity") +
+  xlab("Military") + 
+  ylab("Income gap($)") +
+  ggtitle("Income gap between men and women, by Military") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  theme(text = element_text(size=12), plot.title = element_text(hjust=0.5)) 
+```
+
+
+
+
+Repeat with exp.Educ1979
+
+
+
+
+```{r, echo=FALSE}
+# Calculate income gaps (male - female) and 95% confidence intervals
+# for the gap
+gap.data.conf <- ddply(nlsy, ~ exp.Educ1979, summarize, 
+                       income.gap = mean(income[gender == "Male"], na.rm = TRUE) - mean(income[gender == "Female"], na.rm = TRUE),
+                       upper = -t.test(income ~ gender)$conf.int[1],
+                       lower = -t.test(income ~ gender)$conf.int[2],
+                       is.significant = as.numeric(t.test(income ~ gender)$p.value < 0.05))
+
+# Re-order the race factor according to gap size
+gap.data.conf <- transform(gap.data.conf,
+                           exp.Educ1979 = reorder(exp.Educ1979, income.gap))
+
+# Plot, with error bars
+ggplot(data = gap.data.conf, aes(x = exp.Educ1979, y = income.gap,
+                            fill = is.significant)) +
+  geom_bar(stat = "identity") +
+  xlab("exp.Educ1979") + 
+  ylab("Income gap($)") +
+  ggtitle("Income gap btw. men and women, by exp.Educ1979") + 
+  guides(fill = FALSE) +
+  geom_errorbar(aes(ymax = upper, ymin = lower), width = 0.1, size = 1) +
+  #theme(text = element_text(size=12)) 
+  theme(axis.text.x = element_text(angle = 30, vjust =1, hjust = 1), plot.title = element_text(hjust=0.5)) 
+```
+
+
+
+
+
+
+
+##2. Methodology
+```{r}
+inline <- count(nlsy.orig$income==max(nlsy.orig$income)) #people in our dataset that are slotted as earning
+inline.1 <- inline[,2]
+```
+
+**a) Topcoded values**
+
+As we saw in our data summary section, and noted in the survey, the top 2% of earners are set to an income variable of the average of the top 2% of earners. There are **`r inline.1`** people in our dataset that are slotted as earning **$`r nlsy.orig$income[which.max(nlsy.orig$income)]`**. This isn't too helpful, as each of the high earning people are given the same value of income, which isn't representative of their actual income. So we will ignore these topcoded values in our analysis. I also want to ignore missing data. 
+
+```{r}
+nlsy.before
+qplot(x=income, binwidth = 20000, geom = "histogram", data = nlsy)
+```
+
+
+**b) Negative values & NA**
+In the survey data, some of the questions were skipped by the participant or were not given in the interview. These values were coded as negative numbers. For example: Looking at the dataset, for the question that I renamed "num.children.2000, there are 3920 people who skipped the question, and 4653 that didn't get the question in the interview. Coding these as a negative value wouldn't make sense. Therefore I will code them as NA so that I can see clean up the data and manipulate the NA values as one set of values if needed" 
+
+**c) Trials and tribulations**
+
+I explored many different variables before I settled on my final selection. Among those were a few of the language variables such as factors that would indicate respondents were immigrants or from a different culture. I spent a lot of time looking at the "spoke foreign language" and "specific foreign language" variable because I was interested if there would be effects between immigrants and also between children that were multi-lingual. Unfortunately, due to time restrictions I wasn't able to proceed as in depth as would have lived to. Below are two interesting visuals just for fun.
+
+```{r}
+ggplot(data = nlsy.pre, aes(x = spoke.ForeignLang, fill = race, position = "dodge")) + geom_bar() + ggtitle("Bilingual?") + theme(plot.title = element_text(hjust=0.5)) 
+ggplot(data = nlsy.pre, aes(x = specific.ForeignLang, fill = race, position = "dodge")) + geom_bar() + ggtitle("Which Language") + theme(plot.title = element_text(hjust=0.5)) 
+```
+
+```{r}
+#code inserted up top: nlsy[nlsy < 0] <- NA
+```
+I performed various analyses that led to my results which I will explain in the findings. 
+
+
+##3. Findings
+
+
+Now that we have a feel of our data, and we've removed the topcoded values, let's go back to our main question: does income vary between male and females?
+
+While exploring our data earlier, it appeared that income varied between men and women. The difference is statistically significant.
+"race", "gender", "exp.Educ1979", "Famsize_2012","Military"
+checking for collinearity
+```{r, echo = FALSE}
+nlsy.new <- na.omit(nlsy)
+```
+
+```{r}
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = pmax(1, cex.cor * r))
+}
+pairs(nlsy.new, lower.panel = panel.cor)
+```
+
+None of my variables are highly correlated, so I am leaving them all in the model for now.
+
+
+Let's build an initial model with linear regression
+```{r}
+nlsy.new <- na.omit(nlsy)
+nlsy.lm <- lm(income ~ gender + race, data = nlsy.new)
+kable(round(summary(nlsy.lm)$coef, 3), format = "markdown")
+```
+
+
+
+
+
+
+
+
+
+Is race a statistically significant predictor of income compared to a model of just gender?
+```{r}
+anova(update(nlsy.lm, . ~ . -race), nlsy.lm)
+```
+With a p-value of 0, this test explains that there are variations in income that are not accounted for by gender. Race is a highly significant predictor of income in the model.
+
+We will update the model by adding an interaction term between race and gender. We saw in the data summary above that there is income gap among different races and that the difference was statistically significant.
+```{r}
+nlsy.lm.interact <- update(nlsy.lm, .~. + race*gender)
+kable(round(summary(nlsy.lm.interact)$coef, 3), format = "markdown")
+```
+
+Test significance of interaction term
+```{r}
+anova(nlsy.lm, nlsy.lm.interact)
+```
+The p-value is statistically significant at **0.000** so conclude that the income gap between men and women does vary with race.
+
+Let's add more of our variables to the model to see if they help in our analysis
+```{r}
+nlsy.lm.interact.mil <- update(nlsy.lm.interact, .~. + Military)
+kable(round(summary(nlsy.lm.interact.mil)$coef, 3), format = "markdown")
+```
+
+
+
+
+
+
+
+
+
+
+With a p.value of 0.167, we're going to drop this variable; this is also consistent with our findings in the data summary where our error bars overlapped showing that the income gap difference, while slightly different in our dataset, was not conclusive or insightful.
+
+Let's keep going...
+```{r}
+nlsy.lm.1979 <- update(nlsy.lm.interact, .~. + exp.Educ1979)
+kable(round(summary(nlsy.lm.1979)$coef, 3), format = "markdown")
+```
+```{r}
+anova(nlsy.lm.interact, nlsy.lm.1979)
+
+```
+```{r}
+nlsy.lm.interact.1979 <- update(nlsy.lm.1979, .~. + exp.Educ1979*gender)
+kable(round(summary(nlsy.lm.interact.1979)$coef, 4), format = "markdown")
+```
+
+It doesn't appear that our interaction terms provide us with much insight with the high p-values. Let's check with anova.
+
+
+
+
+
+
+
+```r{}
+anova(nlsy.lm.1979, nlsy.lm.interact.1979)
+```
+
+
+
+
+
+
+
+
+
+
+The p. value is 0.35, so drop the interaction term.
+
+```{r}
+nlsy.lm.1979.fam <- update(nlsy.lm.1979, .~. + Famsize_2012)
+kable(round(summary(nlsy.lm.1979.fam)$coef, 6), format = "markdown")
+```
+
+
+
+
+
+
+
+
+
+####This is our final model
+```{r}
+nlsy.final <- nlsy.lm.1979.fam
+summary(nlsy.final)
+par(mfrow = c(1,1))
+plot(nlsy.final)
+
+
+
+```
+
+
+##4. Discussion
+
+Our final model predicts the income gap, but as we can see from our findings section and the Normal Q-Q plot, our model is not perfect for predicting income. 
+
+R - squared
+Our final r-squared was 0.169 which is low.  Our model is only explaining 0.169 of the variance in income. I'm less worried about this statistic however as we are not trying to figure out the factors that effect income. We are instead looking at the factors that exacerbate or mitigate the income gap. My model ended up having 10+ factors that were significant in impacting the income gap.
+
+For fun, I choose three random variables that I just had a hunch would be more appropriate for explaining income. Just by regressing the three variable: educ.Attain2000, jobs.num, and POVSTATUS_2000, we already attain a slightly higher (.177) r-squared than our complex model. However, this isn't helping us determine the income gap at all.
+
+```{r}
+summary(lm(income ~ educ.Attain2000 + jobs.num + POVSTATUS_2000, data = nlsy.trial))
+```
+
+
+While I developed a solid model, I'm not sure how confident I would be at presenting my results as scientific fact. In essence, this was an awesome experience for someone who only started coding this fall and has taken one statistics class in the past 3 years. I'd love to continue on with more in-depth statistical analysis training and be able to apply my new R skills to explore further. 
+
+
+Another interesting finding was this idea of "motivation" or "drive". When breaking out the factor variable of expected education in 1979, it's easy to see from our coefficients that respondents who believed that they would complete higher levels of schooling actually ended up making more income further down the road. That raises a more complicated question of resource allocation to mitigate such gaps. For instance, if you invest in early education in low income neighborhoods and raise children's expectations, their long term income potential might go up more than just investing in something like a scholarship, or a welfare benefit. 
+
+
+
+
+
+
+
+
